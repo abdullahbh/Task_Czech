@@ -4,7 +4,7 @@ from datetime import datetime
 import time
 
 # Configuration
-API_URL = "http://localhost:5000/api/data"  # Replace with your server URL
+API_URL = "https://taskczech-production.up.railway.app/api/data"  # Replace with your server URL
 CSV_FILE = "electricity_market_data.csv"  # File to save the data
 
 def fetch_data():

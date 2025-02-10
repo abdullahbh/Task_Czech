@@ -7,8 +7,19 @@ import pytz
 import time
 import threading
 from bs4 import BeautifulSoup
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (you can restrict this to specific domains)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Global variables to store the latest data and last fetched interval
 latest_data = None

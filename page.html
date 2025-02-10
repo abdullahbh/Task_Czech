@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electricity Market Data Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .data-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .status-info {
+            margin: 1rem 0;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .warning {
+            color: #e74c3c;
+            font-weight: bold;
+            margin: 1rem 0;
+        }
+        .refresh-info {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Czech Electricity Market Data</h1>
+        
+        <div class="status-info">
+            <div>Last Updated: <span id="last-updated">-</span></div>
+            <div>Next Update: <span id="next-update">-</span></div>
+            <div id="error-message" class="warning"></div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Interval</th>
+                    <th>Traded Volume (MWh)</th>
+                    <th>Purchased (MWh)</th>
+                    <th>Sold (MWh)</th>
+                    <th>Avg Price (€/MWh)</th>
+                    <th>Min Price</th>
+                    <th>Max Price</th>
+                    <th>Last Price</th>
+                </tr>
+            </thead>
+            <tbody id="data-body">
+                <tr id="loading-row">
+                    <td colspan="8">Loading data...</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="refresh-info">
+            Data updates automatically every 15 minutes. Page will refresh in <span id="refresh-timer">-</span> seconds.
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://taskczech-production.up.railway.app/api/data';
+        let refreshInterval;
+        let nextRefreshTime;
+
+        function updateDisplay(data) {
+            // Update last updated time
+            document.getElementById('last-updated').textContent = 
+                new Date().toLocaleString('en-GB', { timeZone: 'Europe/Prague' });
+
+            // Clear loading message
+            const loadingRow = document.getElementById('loading-row');
+            if (loadingRow) loadingRow.remove();
+
+            // Update table data
+            const tbody = document.getElementById('data-body');
+            tbody.innerHTML = '';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${data.interval || '-'}</td>
+                <td>${data.traded_volume || '-'}</td>
+                <td>${data.purchased_volume || '-'}</td>
+                <td>${data.sold_volume || '-'}</td>
+                <td>${data.weighted_average_price || '-'}</td>
+                <td>${data.min_price || '-'}</td>
+                <td>${data.max_price || '-'}</td>
+                <td>${data.last_price || '-'}</td>
+            `;
+            tbody.appendChild(row);
+
+            // Handle warnings
+            const errorMessage = document.getElementById('error-message');
+            if (data.fallback_message) {
+                errorMessage.textContent = data.fallback_message;
+            } else {
+                errorMessage.textContent = '';
+            }
+        }
+
+        function handleError(message) {
+            document.getElementById('error-message').textContent = message;
+            const tbody = document.getElementById('data-body');
+            tbody.innerHTML = '<tr><td colspan="8">Error loading data. Retrying...</td></tr>';
+        }
+
+        function calculateNextRefresh() {
+            const now = new Date();
+            const minutes = now.getMinutes();
+            const next = new Date(now);
+            
+            // Calculate next quarter hour
+            next.setMinutes((Math.floor(minutes / 15) + 1) * 15);
+            next.setSeconds(0);
+            next.setMilliseconds(0);
+            
+            // If we're exactly on the quarter hour, add 15 minutes
+            if (next.getTime() <= now.getTime()) {
+                next.setTime(next.getTime() + 900000);
+            }
+            
+            return next;
+        }
+
+        function updateRefreshTimer() {
+            const now = new Date();
+            const diff = Math.floor((nextRefreshTime - now) / 1000);
+            document.getElementById('refresh-timer').textContent = diff;
+            document.getElementById('next-update').textContent = 
+                nextRefreshTime.toLocaleString('en-GB', { timeZone: 'Europe/Prague' });
+
+            if (diff <= 0) {
+                fetchData();
+                nextRefreshTime = calculateNextRefresh();
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Validate data
+                if (!data.interval || data.traded_volume === '-') {
+                    throw new Error('Data not complete yet');
+                }
+
+                updateDisplay(data);
+                nextRefreshTime = calculateNextRefresh();
+                
+                // Update timer every second
+                if (refreshInterval) clearInterval(refreshInterval);
+                refreshInterval = setInterval(updateRefreshTimer, 1000);
+
+            } catch (error) {
+                handleError(`Error: ${error.message}. Retrying in 30 seconds...`);
+                setTimeout(fetchData, 30000);
+            }
+        }
+
+        // Initial fetch
+        fetchData();
+        nextRefreshTime = calculateNextRefresh();
+
+        // Start refresh timer
+        setInterval(updateRefreshTimer, 1000);
+    </script>
+</body>
+</html>

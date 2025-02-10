@@ -4,3 +4,4 @@ pandas
 openpyxl
 pytz
 xlrd
+fastapi
